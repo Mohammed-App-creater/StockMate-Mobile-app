@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
 import {
   Alert,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,11 +8,26 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Camera, Check, Folder, Layers, ScanLine, Tag, TrendingDown, TrendingUp } from 'lucide-react-native';
+import { useCameraPermissions } from 'expo-camera';
 import { PRODUCT_UNITS, productsApi, type ProductUnit } from '../../../store/api';
-import { colors } from '../../../constants/colors';
+import { colors, shadowCard } from '../../../constants/colors';
+import { Navbar } from '../../../components/Navbar';
+import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+
+function Field({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+  return (
+    <View style={styles.field}>
+      <View style={styles.labelRow}>
+        {icon}
+        <Text style={styles.label}>{label}</Text>
+      </View>
+      {children}
+    </View>
+  );
+}
 
 export default function AddProductScreen() {
   const router = useRouter();
@@ -39,11 +53,6 @@ export default function AddProductScreen() {
       }
     }
     setScannerOpen(true);
-  };
-
-  const onScanned = (data: string) => {
-    setBarcode(data);
-    setScannerOpen(false);
   };
 
   const submit = async () => {
@@ -72,157 +81,110 @@ export default function AddProductScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <Field label="Name *">
-        <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Product name" placeholderTextColor={colors.textMuted} />
-      </Field>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <Navbar title="Add Product" subtitle="New inventory item" />
 
-      <Field label="Category *">
-        <TextInput style={styles.input} value={category} onChangeText={setCategory} placeholder="e.g. Grains" placeholderTextColor={colors.textMuted} />
-      </Field>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <Field icon={<Tag size={16} color={colors.textMuted} />} label="Product Name">
+          <View style={styles.input}>
+            <TextInput style={styles.inputText} value={name} onChangeText={setName} placeholder="Product name" placeholderTextColor={colors.textMuted2} />
+          </View>
+        </Field>
 
-      <Field label="Unit *">
-        <View style={styles.pickerWrap}>
-          <Picker selectedValue={unit} onValueChange={(v) => setUnit(v as ProductUnit)}>
-            {PRODUCT_UNITS.map((u) => (
-              <Picker.Item key={u} label={u} value={u} />
-            ))}
-          </Picker>
+        <Field icon={<Folder size={16} color={colors.textMuted} />} label="Category">
+          <View style={styles.input}>
+            <TextInput style={styles.inputText} value={category} onChangeText={setCategory} placeholder="e.g. Cooking Oil" placeholderTextColor={colors.textMuted2} />
+          </View>
+        </Field>
+
+        <Field icon={<Layers size={16} color={colors.textMuted} />} label="Unit">
+          <View style={styles.segment}>
+            {PRODUCT_UNITS.map((u) => {
+              const on = unit === u;
+              return (
+                <TouchableOpacity key={u} style={[styles.segOpt, on && styles.segOptOn]} onPress={() => setUnit(u)} activeOpacity={0.8}>
+                  <Text style={[styles.segText, on && styles.segTextOn]}>{u}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </Field>
+
+        <View style={styles.row}>
+          <View style={styles.flex1}>
+            <Field icon={<TrendingDown size={16} color={colors.textMuted} />} label="Buying Price">
+              <View style={styles.input}>
+                <TextInput style={styles.inputText} value={buyingPrice} onChangeText={setBuyingPrice} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.textMuted2} />
+                <Text style={styles.affix}>ETB</Text>
+              </View>
+            </Field>
+          </View>
+          <View style={styles.flex1}>
+            <Field icon={<TrendingUp size={16} color={colors.textMuted} />} label="Selling Price">
+              <View style={styles.input}>
+                <TextInput style={styles.inputText} value={sellingPrice} onChangeText={setSellingPrice} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.textMuted2} />
+                <Text style={styles.affix}>ETB</Text>
+              </View>
+            </Field>
+          </View>
         </View>
-      </Field>
 
-      <View style={styles.row}>
-        <Field label="Buying price *" style={styles.flex1}>
-          <TextInput style={styles.input} value={buyingPrice} onChangeText={setBuyingPrice} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.textMuted} />
+        <Field icon={<Layers size={16} color={colors.textMuted} />} label="Current Stock">
+          <View style={styles.input}>
+            <TextInput style={styles.inputText} value={currentStock} onChangeText={setCurrentStock} keyboardType="number-pad" placeholder="0" placeholderTextColor={colors.textMuted2} />
+          </View>
         </Field>
-        <Field label="Selling price *" style={styles.flex1}>
-          <TextInput style={styles.input} value={sellingPrice} onChangeText={setSellingPrice} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.textMuted} />
+
+        <Field icon={<ScanLine size={16} color={colors.textMuted} />} label="Barcode">
+          <View style={styles.input}>
+            <TextInput style={[styles.inputText, { paddingRight: 48 }]} value={barcode} onChangeText={setBarcode} placeholder="Scan or type" placeholderTextColor={colors.textMuted2} autoCapitalize="none" />
+            <TouchableOpacity style={styles.camera} onPress={openScanner} activeOpacity={0.85}>
+              <Camera size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </Field>
+      </ScrollView>
+
+      <View style={styles.foot}>
+        <TouchableOpacity style={[styles.saveBtn, submitting && styles.disabled]} onPress={submit} disabled={submitting} activeOpacity={0.9}>
+          <Check size={20} color="#fff" />
+          <Text style={styles.saveText}>{submitting ? 'Saving…' : 'Save Product'}</Text>
+        </TouchableOpacity>
       </View>
 
-      <Field label="Barcode">
-        <View style={styles.barcodeRow}>
-          <TextInput
-            style={[styles.input, styles.flex1]}
-            value={barcode}
-            onChangeText={setBarcode}
-            placeholder="Scan or type"
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-          />
-          <TouchableOpacity style={styles.scanButton} onPress={openScanner} activeOpacity={0.8}>
-            <Text style={styles.scanIcon}>📷</Text>
-          </TouchableOpacity>
-        </View>
-      </Field>
-
-      <Field label="Current stock">
-        <TextInput style={styles.input} value={currentStock} onChangeText={setCurrentStock} keyboardType="number-pad" placeholder="0" placeholderTextColor={colors.textMuted} />
-      </Field>
-
-      <TouchableOpacity
-        style={[styles.submit, submitting && styles.submitDisabled]}
-        onPress={submit}
-        disabled={submitting}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.submitText}>{submitting ? 'Saving…' : 'Save Product'}</Text>
-      </TouchableOpacity>
-
-      <Modal visible={scannerOpen} animationType="slide" onRequestClose={() => setScannerOpen(false)}>
-        <View style={styles.cameraContainer}>
-          {scannerOpen && (
-            <CameraView
-              style={StyleSheet.absoluteFill}
-              facing="back"
-              barcodeScannerSettings={{
-                barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39', 'qr'],
-              }}
-              onBarcodeScanned={({ data }) => onScanned(data)}
-            />
-          )}
-          <View style={styles.scanFrame} pointerEvents="none" />
-          <Text style={styles.scanHint}>Point the camera at a barcode</Text>
-          <TouchableOpacity style={styles.cancelScan} onPress={() => setScannerOpen(false)} activeOpacity={0.85}>
-            <Text style={styles.cancelScanText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
-    </ScrollView>
-  );
-}
-
-function Field({ label, children, style }: { label: string; children: React.ReactNode; style?: any }) {
-  return (
-    <View style={[styles.field, style]}>
-      <Text style={styles.label}>{label}</Text>
-      {children}
-    </View>
+      <BarcodeScannerModal visible={scannerOpen} onClose={() => setScannerOpen(false)} onScanned={(d) => { setBarcode(d); setScannerOpen(false); }} />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 16, paddingBottom: 40 },
-  field: { marginBottom: 14 },
+  safe: { flex: 1, backgroundColor: colors.background },
+  content: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 24 },
+  field: { marginBottom: 16 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },
+  label: { fontSize: 13, fontWeight: '600', color: colors.navy },
   row: { flexDirection: 'row', gap: 12 },
   flex1: { flex: 1 },
-  label: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 6 },
   input: {
+    minHeight: 50,
+    backgroundColor: colors.fieldBg,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: colors.text,
-    backgroundColor: colors.surface,
-  },
-  pickerWrap: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    backgroundColor: colors.surface,
-    overflow: 'hidden',
-  },
-  barcodeRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  scanButton: {
-    width: 50,
-    height: 48,
-    borderRadius: 10,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scanIcon: { fontSize: 22 },
-  submit: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  submitDisabled: { opacity: 0.6 },
-  submitText: { color: colors.white, fontSize: 16, fontWeight: '700' },
-  cameraContainer: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
-  scanFrame: {
-    width: 260,
-    height: 160,
-    borderWidth: 2,
-    borderColor: colors.white,
     borderRadius: 12,
-    backgroundColor: 'transparent',
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  scanHint: { color: colors.white, marginTop: 20, fontSize: 15 },
-  cancelScan: {
-    position: 'absolute',
-    bottom: 48,
-    paddingHorizontal: 28,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 999,
-  },
-  cancelScanText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  inputText: { flex: 1, fontSize: 15, color: colors.text, paddingVertical: 13 },
+  affix: { color: colors.textMuted, fontSize: 13, fontWeight: '700', marginLeft: 6 },
+  camera: { position: 'absolute', right: 7, width: 36, height: 36, borderRadius: 10, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  segment: { flexDirection: 'row', gap: 4, backgroundColor: '#F1F5F9', borderRadius: 12, padding: 4 },
+  segOpt: { flex: 1, height: 40, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  segOptOn: { backgroundColor: '#fff', ...shadowCard },
+  segText: { fontSize: 13.5, fontWeight: '600', color: colors.textMuted, textTransform: 'capitalize' },
+  segTextOn: { color: colors.primary },
+  foot: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10 },
+  saveBtn: { height: 54, borderRadius: 14, backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, shadowColor: colors.primary, shadowOpacity: 0.3, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+  disabled: { opacity: 0.5 },
+  saveText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { ReactNode, useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -8,33 +8,38 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { Coins, LogOut, Receipt, Repeat, ShoppingCart, TrendingUp, Wallet } from 'lucide-react-native';
 import {
   analyticsApi,
   transactionsApi,
   type PeriodSummary,
   type Transaction,
-  type TransactionType,
 } from '../../store/api';
 import { useAuthStore } from '../../store/auth';
 import { formatMoney, toNumber } from '../../constants/format';
-import { colors } from '../../constants/colors';
+import { colors, shadowCard } from '../../constants/colors';
+import { Badge, IconChip, Mono, SectionRow, text } from '../../components/ui';
 
-function StatCard({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
-  return (
-    <View style={styles.statCard}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={[styles.statValue, valueColor ? { color: valueColor } : null]}>{value}</Text>
-    </View>
-  );
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning,';
+  if (h < 18) return 'Good afternoon,';
+  return 'Good evening,';
 }
 
-function TypeBadge({ type }: { type: TransactionType }) {
-  const isSale = type === 'sale';
+function StatCard({ label, value, icon, valueColor }: { label: string; value: string; icon: ReactNode; valueColor?: string }) {
   return (
-    <View style={[styles.badge, { backgroundColor: isSale ? '#DCFCE7' : '#DBEAFE' }]}>
-      <Text style={[styles.badgeText, { color: isSale ? colors.success : colors.primary }]}>
-        {isSale ? 'Sale' : 'Purchase'}
+    <View style={styles.stat}>
+      <View style={styles.statTop}>
+        <Text style={styles.statLabel}>{label}</Text>
+        {icon}
+      </View>
+      <Text style={[styles.statVal, text.tnum, valueColor ? { color: valueColor } : null]}>
+        {value}
+        <Text style={styles.statCur}> ETB</Text>
       </Text>
     </View>
   );
@@ -55,154 +60,168 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    // Both endpoints may 404 until the backend ships them — handle independently.
     const [summaryRes, recentRes] = await Promise.allSettled([
       analyticsApi.summary('daily'),
       transactionsApi.list({ limit: 5 }),
     ]);
-
-    if (summaryRes.status === 'fulfilled') setSummary(summaryRes.value.data);
-    else setSummary(null);
-
+    setSummary(summaryRes.status === 'fulfilled' ? summaryRes.value.data : null);
     if (recentRes.status === 'fulfilled') {
       const data = recentRes.value.data as any;
       setRecent((Array.isArray(data) ? data : data?.items ?? []).slice(0, 5));
     } else {
       setRecent([]);
     }
-
     setLoading(false);
     setRefreshing(false);
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    load();
-  };
+  const onRefresh = () => { setRefreshing(true); load(); };
 
   const name = (user && (user.full_name || user.username)) || 'there';
+  const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const netProfit = toNumber(summary?.net_profit);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-    >
-      <View style={styles.headerRow}>
-        <View style={styles.flex1}>
-          <Text style={styles.greeting}>Welcome back, {name} 👋</Text>
-          <Text style={styles.subtitle}>Today’s overview</Text>
-        </View>
-        <TouchableOpacity onPress={logout}>
-          <Text style={styles.logout}>Log out</Text>
-        </TouchableOpacity>
-      </View>
-
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : (
-        <>
-          <View style={styles.grid}>
-            <StatCard label="Revenue" value={formatMoney(summary?.total_revenue)} />
-            <StatCard label="Cost" value={formatMoney(summary?.total_cost)} />
-            <StatCard
-              label="Net Profit"
-              value={formatMoney(summary?.net_profit)}
-              valueColor={netProfit >= 0 ? colors.success : colors.error}
-            />
-            <StatCard label="Transactions" value={String(summary?.total_transactions ?? 0)} />
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      >
+        <View style={styles.headRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.greet}>{greeting()}</Text>
+            <Text style={styles.name}>{name}</Text>
+            <Text style={styles.date}>{dateStr}</Text>
           </View>
+          <TouchableOpacity style={styles.bell} onPress={logout} accessibilityLabel="Log out">
+            <LogOut size={20} color={colors.navy} />
+          </TouchableOpacity>
+        </View>
 
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: colors.success }]}
-              activeOpacity={0.85}
-              onPress={() => router.push({ pathname: '/(app)/transactions/add', params: { type: 'sale' } })}
-            >
-              <Text style={styles.actionText}>+ Record Sale</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: colors.primary }]}
-              activeOpacity={0.85}
-              onPress={() => router.push({ pathname: '/(app)/transactions/add', params: { type: 'purchase' } })}
-            >
-              <Text style={styles.actionText}>+ Record Purchase</Text>
-            </TouchableOpacity>
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
+        ) : (
+          <>
+            <View style={styles.grid}>
+              <StatCard label="Revenue" value={formatMoney(summary?.total_revenue, false)} icon={<IconChip tone="blue"><Coins size={20} color={colors.primary} /></IconChip>} />
+              <StatCard label="Cost" value={formatMoney(summary?.total_cost, false)} icon={<IconChip tone="slate"><Wallet size={20} color={colors.navy} /></IconChip>} />
+              <StatCard
+                label="Net Profit"
+                value={formatMoney(summary?.net_profit, false)}
+                valueColor={netProfit >= 0 ? colors.success : colors.danger}
+                icon={<IconChip tone="green"><TrendingUp size={20} color={colors.success} /></IconChip>}
+              />
+              <StatCardPlain label="Transactions" value={String(summary?.total_transactions ?? 0)} icon={<IconChip tone="amber"><Repeat size={20} color={colors.warning} /></IconChip>} />
+            </View>
 
-          <Text style={styles.sectionTitle}>Recent transactions</Text>
-          {recent.length === 0 ? (
-            <Text style={styles.muted}>No recent transactions.</Text>
-          ) : (
-            recent.map((t) => (
-              <TouchableOpacity key={t.id} style={styles.txRow} activeOpacity={0.7} onPress={() => router.push('/(app)/transactions')}>
-                <View style={styles.flex1}>
-                  <Text style={styles.txName} numberOfLines={1}>
-                    {t.product?.name ?? 'Product'}
-                  </Text>
-                  <Text style={styles.muted}>Qty {t.total_quantity}</Text>
-                </View>
-                <View style={styles.txRight}>
-                  <TypeBadge type={t.transaction_type} />
-                  <Text style={styles.txValue}>{formatMoney(txValue(t))}</Text>
-                </View>
+            <SectionRow title="Quick Actions" />
+            <View style={styles.qactions}>
+              <TouchableOpacity activeOpacity={0.9} style={styles.qaShadow} onPress={() => router.push({ pathname: '/(app)/transactions/add', params: { type: 'sale' } })}>
+                <LinearGradient colors={['#16A34A', '#12823B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.qaction}>
+                  <View style={styles.qaIco}><Receipt size={22} color="#fff" /></View>
+                  <View>
+                    <Text style={styles.qaLbl}>Record Sale</Text>
+                    <Text style={styles.qaSub}>Sell to customer</Text>
+                  </View>
+                </LinearGradient>
               </TouchableOpacity>
-            ))
-          )}
-        </>
-      )}
-    </ScrollView>
+              <TouchableOpacity activeOpacity={0.9} style={styles.qaShadow} onPress={() => router.push({ pathname: '/(app)/transactions/add', params: { type: 'purchase' } })}>
+                <LinearGradient colors={['#2563EB', '#1D4ED8']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.qaction}>
+                  <View style={styles.qaIco}><ShoppingCart size={22} color="#fff" /></View>
+                  <View>
+                    <Text style={styles.qaLbl}>Record Purchase</Text>
+                    <Text style={styles.qaSub}>Buy new stock</Text>
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+
+            <SectionRow
+              title="Recent Transactions"
+              link={
+                <TouchableOpacity onPress={() => router.push('/(app)/transactions')}>
+                  <Text style={styles.link}>See all</Text>
+                </TouchableOpacity>
+              }
+            />
+            {recent.length === 0 ? (
+              <Text style={text.muted}>No recent transactions.</Text>
+            ) : (
+              <View style={styles.txCard}>
+                {recent.map((t, i) => {
+                  const isSale = t.transaction_type === 'sale';
+                  const pname = t.product?.name ?? 'Product';
+                  return (
+                    <View key={t.id} style={[styles.txItem, i > 0 && styles.txDivider]}>
+                      <Mono name={pname} seed={t.product_id} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.txName} numberOfLines={1}>{pname}</Text>
+                        <View style={{ marginTop: 4 }}>
+                          <Badge tone={isSale ? 'green' : 'blue'} dot>{isSale ? 'Sale' : 'Purchase'}</Badge>
+                        </View>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={[styles.txAmt, text.tnum, { color: isSale ? colors.success : colors.navy }]}>
+                          {isSale ? '+' : '−'}{formatMoney(txValue(t))}
+                        </Text>
+                        <Text style={styles.txQty}>{t.total_quantity} units</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+// Transactions stat card has no " ETB" suffix.
+function StatCardPlain({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
+  return (
+    <View style={styles.stat}>
+      <View style={styles.statTop}>
+        <Text style={styles.statLabel}>{label}</Text>
+        {icon}
+      </View>
+      <Text style={[styles.statVal, text.tnum]}>{value}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 20, paddingBottom: 40 },
-  flex1: { flex: 1 },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  greeting: { fontSize: 22, fontWeight: '700', color: colors.text },
-  subtitle: { fontSize: 14, color: colors.textMuted, marginTop: 4 },
-  logout: { color: colors.error, fontWeight: '600', fontSize: 14, paddingTop: 4 },
-  center: { paddingVertical: 60, alignItems: 'center', justifyContent: 'center' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 20 },
-  statCard: {
-    width: '47.5%',
-    flexGrow: 1,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-  },
-  statLabel: { fontSize: 13, color: colors.textMuted },
-  statValue: { fontSize: 22, fontWeight: '800', color: colors.text, marginTop: 6 },
-  actions: { flexDirection: 'row', gap: 12, marginTop: 20 },
-  actionBtn: { flex: 1, paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
-  actionText: { color: colors.white, fontWeight: '700', fontSize: 15 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginTop: 28, marginBottom: 10 },
-  muted: { fontSize: 14, color: colors.textMuted },
-  txRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 8,
-  },
-  txName: { fontSize: 15, fontWeight: '600', color: colors.text },
-  txRight: { alignItems: 'flex-end', gap: 4 },
-  badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999 },
-  badgeText: { fontSize: 12, fontWeight: '700' },
-  txValue: { fontSize: 15, fontWeight: '700', color: colors.primary },
+  safe: { flex: 1, backgroundColor: colors.background },
+  content: { padding: 20, paddingBottom: 28 },
+  center: { paddingVertical: 80, alignItems: 'center' },
+  headRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 },
+  greet: { fontSize: 14, color: colors.textMuted, fontWeight: '500' },
+  name: { fontSize: 23, fontWeight: '700', letterSpacing: -0.5, color: colors.navy, marginTop: 1 },
+  date: { fontSize: 13, color: colors.textMuted2, marginTop: 2 },
+  bell: { width: 42, height: 42, borderRadius: 13, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', ...shadowCard },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 18 },
+  stat: { width: '47.5%', flexGrow: 1, backgroundColor: colors.card, borderRadius: 16, padding: 15, ...shadowCard },
+  statTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  statLabel: { fontSize: 12.5, color: colors.textMuted, fontWeight: '600' },
+  statVal: { fontSize: 19, fontWeight: '700', letterSpacing: -0.4, color: colors.navy },
+  statCur: { fontSize: 12, color: colors.textMuted2, fontWeight: '600' },
+  qactions: { flexDirection: 'row', gap: 12 },
+  qaShadow: { flex: 1, borderRadius: 15, ...shadowCard },
+  qaction: { borderRadius: 15, padding: 16, gap: 10, minHeight: 110, justifyContent: 'space-between' },
+  qaIco: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  qaLbl: { fontSize: 15, fontWeight: '700', color: '#fff', letterSpacing: -0.2 },
+  qaSub: { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
+  link: { fontSize: 13, fontWeight: '600', color: colors.primary },
+  txCard: { backgroundColor: colors.card, borderRadius: 16, ...shadowCard },
+  txItem: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, paddingHorizontal: 15 },
+  txDivider: { borderTopWidth: 1, borderTopColor: colors.hairline },
+  txName: { fontSize: 14, fontWeight: '600', color: colors.navy },
+  txAmt: { fontSize: 14.5, fontWeight: '700', letterSpacing: -0.2 },
+  txQty: { fontSize: 11.5, color: colors.textMuted, marginTop: 1 },
 });

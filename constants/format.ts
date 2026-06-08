@@ -7,13 +7,24 @@ export function toNumber(value: string | number | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-// Money with thousands separators and 2 decimals. No hard-coded currency symbol
-// (the accountant's currency is unknown); change the prefix here if needed.
-export function formatMoney(value: string | number | null | undefined): string {
-  return toNumber(value).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+// Plain number with thousands separators (no currency symbol).
+export function formatMoney(
+  value: string | number | null | undefined,
+  decimals = true
+): string {
+  return toNumber(value).toLocaleString('en-US', {
+    minimumFractionDigits: decimals ? 2 : 0,
+    maximumFractionDigits: decimals ? 2 : 0,
   });
+}
+
+// "ETB 1,395.00" — the app's currency (Ethiopian Birr) per the design.
+export const CURRENCY = 'ETB';
+export function formatETB(
+  value: string | number | null | undefined,
+  decimals = true
+): string {
+  return `${CURRENCY} ${formatMoney(value, decimals)}`;
 }
 
 export function formatDate(value: string | null | undefined): string {

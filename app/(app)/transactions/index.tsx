@@ -9,15 +9,18 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { Bell, Plus } from 'lucide-react-native';
 import {
   transactionsApi,
   type ReceiptSplit,
   type Transaction,
   type TransactionType,
 } from '../../../store/api';
-import { formatDate, formatMoney, toNumber } from '../../../constants/format';
-import { colors } from '../../../constants/colors';
+import { formatDate, formatETB, formatMoney, toNumber } from '../../../constants/format';
+import { colors, shadowCard } from '../../../constants/colors';
+import { Badge, Mono } from '../../../components/ui';
 
 type Filter = 'all' | 'purchase' | 'sale';
 const FILTERS: { key: Filter; label: string }[] = [
@@ -42,17 +45,6 @@ function splitCounts(splits: ReceiptSplit[] = []) {
   return { withR, without };
 }
 
-function TypeBadge({ type }: { type: TransactionType }) {
-  const isSale = type === 'sale';
-  return (
-    <View style={[styles.typeBadge, { backgroundColor: isSale ? '#DCFCE7' : '#DBEAFE' }]}>
-      <Text style={[styles.typeBadgeText, { color: isSale ? colors.success : colors.primary }]}>
-        {isSale ? 'Sale' : 'Purchase'}
-      </Text>
-    </View>
-  );
-}
-
 export default function TransactionsScreen() {
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>('all');
@@ -69,7 +61,6 @@ export default function TransactionsScreen() {
       const data = res.data as any;
       setItems(Array.isArray(data) ? data : data?.items ?? []);
     } catch (e: any) {
-      // The backend has no /transactions route yet → friendly empty state.
       setError(
         e?.response?.status === 404
           ? 'Transactions aren’t available on the server yet.'
@@ -95,25 +86,23 @@ export default function TransactionsScreen() {
   };
 
   const renderItem = ({ item }: { item: Transaction }) => {
+    const isSale = item.transaction_type === 'sale';
     const { withR, without } = splitCounts(item.receipt_splits);
     return (
       <TouchableOpacity style={styles.card} activeOpacity={0.7} onPress={() => setSelected(item)}>
-        <View style={styles.cardTop}>
-          <Text style={styles.name} numberOfLines={1}>
-            {productName(item)}
-          </Text>
-          <TypeBadge type={item.transaction_type} />
+        <Mono name={productName(item)} seed={item.product_id} size={46} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.name} numberOfLines={1}>{productName(item)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 5 }}>
+            <Badge tone={isSale ? 'green' : 'blue'} dot>{isSale ? 'Sale' : 'Purchase'}</Badge>
+            <Text style={styles.meta}>{formatDate(item.created_at)}</Text>
+          </View>
         </View>
-        <View style={styles.cardMid}>
-          <Text style={styles.meta}>{formatDate(item.created_at)}</Text>
-          <Text style={styles.value}>{formatMoney(totalValue(item))}</Text>
-        </View>
-        <View style={styles.cardBottom}>
-          <Text style={styles.meta}>Qty {item.total_quantity}</Text>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={[styles.amt, { color: isSale ? colors.success : colors.navy }]}>{formatMoney(totalValue(item))}</Text>
+          <Text style={styles.qty}>Qty {item.total_quantity}</Text>
           {item.receipt_splits && item.receipt_splits.length > 0 ? (
-            <Text style={styles.receiptMeta}>
-              {withR} with receipt / {without} without
-            </Text>
+            <Text style={styles.receipt}>{withR}✓ / {without}✕</Text>
           ) : null}
         </View>
       </TouchableOpacity>
@@ -121,94 +110,75 @@ export default function TransactionsScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.head}>
+        <Text style={styles.title}>Transactions</Text>
+        <View style={styles.bell}><Bell size={21} color={colors.navy} /></View>
+      </View>
+
       <View style={styles.tabs}>
-        {FILTERS.map((f) => (
-          <TouchableOpacity
-            key={f.key}
-            style={[styles.tab, filter === f.key && styles.tabActive]}
-            onPress={() => setFilter(f.key)}
-          >
-            <Text style={[styles.tabText, filter === f.key && styles.tabTextActive]}>{f.label}</Text>
-          </TouchableOpacity>
-        ))}
+        {FILTERS.map((f) => {
+          const on = filter === f.key;
+          return (
+            <TouchableOpacity key={f.key} style={[styles.tab, on && styles.tabOn]} onPress={() => setFilter(f.key)} activeOpacity={0.85}>
+              <Text style={[styles.tabText, on && styles.tabTextOn]}>{f.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
+        <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
       ) : (
         <FlatList
           data={items}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          contentContainerStyle={items.length === 0 && styles.emptyContainer}
+          contentContainerStyle={[styles.listContent, items.length === 0 && styles.grow]}
+          showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Text style={styles.emptyText}>{error ?? 'No transactions yet.'}</Text>
-            </View>
-          }
+          ListEmptyComponent={<View style={styles.center}><Text style={styles.emptyText}>{error ?? 'No transactions yet.'}</Text></View>}
         />
       )}
 
       <TouchableOpacity style={styles.fab} activeOpacity={0.85} onPress={() => router.push('/(app)/transactions/add')}>
-        <Text style={styles.fabText}>+</Text>
+        <Plus size={26} color="#fff" />
       </TouchableOpacity>
 
-      <TransactionDetailModal transaction={selected} onClose={() => setSelected(null)} />
-    </View>
+      <DetailModal transaction={selected} onClose={() => setSelected(null)} />
+    </SafeAreaView>
   );
 }
 
-function TransactionDetailModal({
-  transaction,
-  onClose,
-}: {
-  transaction: Transaction | null;
-  onClose: () => void;
-}) {
+function DetailModal({ transaction, onClose }: { transaction: Transaction | null; onClose: () => void }) {
   return (
     <Modal visible={!!transaction} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
+      <View style={styles.overlay}>
         <View style={styles.sheet}>
-          <View style={styles.sheetHandle} />
+          <View style={styles.handle} />
           {transaction && (
             <>
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>{productName(transaction)}</Text>
-                <TypeBadge type={transaction.transaction_type} />
+              <View style={styles.sheetHead}>
+                <Text style={styles.sheetTitle} numberOfLines={1}>{productName(transaction)}</Text>
+                <Badge tone={transaction.transaction_type === 'sale' ? 'green' : 'blue'} dot>
+                  {transaction.transaction_type === 'sale' ? 'Sale' : 'Purchase'}
+                </Badge>
               </View>
               <Text style={styles.sheetDate}>{formatDate(transaction.created_at)}</Text>
 
-              <View style={styles.sheetRow}>
-                <Text style={styles.detailLabel}>Quantity</Text>
-                <Text style={styles.detailValue}>{transaction.total_quantity}</Text>
-              </View>
-              <View style={styles.sheetRow}>
-                <Text style={styles.detailLabel}>Unit price</Text>
-                <Text style={styles.detailValue}>{formatMoney(transaction.unit_price)}</Text>
-              </View>
-              <View style={styles.sheetRow}>
-                <Text style={styles.detailLabel}>Discount</Text>
-                <Text style={styles.detailValue}>{formatMoney(transaction.discount_amount)}</Text>
-              </View>
-              <View style={styles.sheetRow}>
-                <Text style={[styles.detailLabel, styles.bold]}>Total value</Text>
-                <Text style={[styles.detailValue, styles.bold]}>{formatMoney(totalValue(transaction))}</Text>
-              </View>
+              <Row label="Quantity" value={String(transaction.total_quantity)} />
+              <Row label="Unit price" value={formatETB(transaction.unit_price)} />
+              <Row label="Discount" value={formatETB(transaction.discount_amount)} />
+              <Row label="Total value" value={formatETB(totalValue(transaction))} bold />
 
               <Text style={styles.splitsTitle}>Receipt splits</Text>
               {(transaction.receipt_splits ?? []).length === 0 ? (
-                <Text style={styles.detailLabel}>No splits recorded.</Text>
+                <Text style={styles.metaLabel}>No splits recorded.</Text>
               ) : (
                 (transaction.receipt_splits ?? []).map((s, i) => (
                   <View key={s.id ?? i} style={styles.splitRow}>
                     <Text style={styles.detailValue}>Qty {s.quantity}</Text>
-                    <Text style={[styles.splitTag, { color: s.has_receipt ? colors.success : colors.textMuted }]}>
-                      {s.has_receipt ? 'With receipt' : 'No receipt'}
-                    </Text>
+                    <Badge tone={s.has_receipt ? 'green' : 'slate'}>{s.has_receipt ? 'With receipt' : 'No receipt'}</Badge>
                   </View>
                 ))
               )}
@@ -216,12 +186,12 @@ function TransactionDetailModal({
               {transaction.notes ? (
                 <>
                   <Text style={styles.splitsTitle}>Notes</Text>
-                  <Text style={styles.detailLabel}>{transaction.notes}</Text>
+                  <Text style={styles.metaLabel}>{transaction.notes}</Text>
                 </>
               ) : null}
 
               <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.85}>
-                <Text style={styles.closeBtnText}>Close</Text>
+                <Text style={styles.closeText}>Close</Text>
               </TouchableOpacity>
             </>
           )}
@@ -231,93 +201,47 @@ function TransactionDetailModal({
   );
 }
 
+function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+  return (
+    <View style={styles.detailRow}>
+      <Text style={[styles.metaLabel, bold && { fontWeight: '800', color: colors.navy }]}>{label}</Text>
+      <Text style={[styles.detailValue, bold && { fontWeight: '800' }]}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  tabs: { flexDirection: 'row', gap: 8, padding: 16, paddingBottom: 8 },
-  tab: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-  },
-  tabActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  tabText: { fontSize: 14, fontWeight: '600', color: colors.textMuted },
-  tabTextActive: { color: colors.white },
+  safe: { flex: 1, backgroundColor: colors.background },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 6, paddingBottom: 8 },
+  title: { fontSize: 22, fontWeight: '700', letterSpacing: -0.5, color: colors.navy },
+  bell: { width: 42, height: 42, borderRadius: 13, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', ...shadowCard },
+  tabs: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 12 },
+  tab: { flex: 1, height: 36, borderRadius: 11, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', ...shadowCard },
+  tabOn: { backgroundColor: colors.navy, shadowOpacity: 0 },
+  tabText: { fontSize: 13.5, fontWeight: '600', color: colors.textMuted },
+  tabTextOn: { color: '#fff' },
   center: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  emptyContainer: { flexGrow: 1 },
+  grow: { flexGrow: 1 },
   emptyText: { color: colors.textMuted, fontSize: 15, textAlign: 'center' },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    marginHorizontal: 16,
-    marginVertical: 6,
-  },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  name: { fontSize: 16, fontWeight: '700', color: colors.text, flex: 1, marginRight: 12 },
-  cardMid: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
-  cardBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
-  meta: { fontSize: 13, color: colors.textMuted },
-  receiptMeta: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic' },
-  value: { fontSize: 16, fontWeight: '700', color: colors.primary },
-  typeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
-  typeBadgeText: { fontSize: 12, fontWeight: '700' },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  fabText: { color: colors.white, fontSize: 30, lineHeight: 32, fontWeight: '300' },
-  // Modal / bottom sheet
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    paddingBottom: 36,
-    maxHeight: '85%',
-  },
-  sheetHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 16 },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sheetTitle: { fontSize: 20, fontWeight: '700', color: colors.text, flex: 1, marginRight: 12 },
+  listContent: { paddingHorizontal: 20, paddingBottom: 100 },
+  card: { flexDirection: 'row', alignItems: 'center', gap: 13, backgroundColor: colors.card, borderRadius: 15, padding: 13, paddingHorizontal: 14, marginBottom: 11, ...shadowCard },
+  name: { fontSize: 14.5, fontWeight: '700', color: colors.navy, letterSpacing: -0.2 },
+  meta: { fontSize: 12, color: colors.textMuted },
+  amt: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+  qty: { fontSize: 11.5, color: colors.textMuted, marginTop: 2 },
+  receipt: { fontSize: 11, color: colors.textMuted2, marginTop: 1 },
+  fab: { position: 'absolute', right: 20, bottom: 24, width: 58, height: 58, borderRadius: 19, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', shadowColor: colors.primary, shadowOpacity: 0.45, shadowRadius: 26, shadowOffset: { width: 0, height: 12 }, elevation: 8 },
+  overlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.4)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36, maxHeight: '85%' },
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 16 },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  sheetTitle: { fontSize: 20, fontWeight: '700', color: colors.navy, flex: 1 },
   sheetDate: { fontSize: 14, color: colors.textMuted, marginTop: 4, marginBottom: 12 },
-  sheetRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  detailLabel: { fontSize: 14, color: colors.textMuted },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.hairline },
+  metaLabel: { fontSize: 14, color: colors.textMuted },
   detailValue: { fontSize: 14, fontWeight: '600', color: colors.text },
-  bold: { fontWeight: '800', color: colors.text },
-  splitsTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginTop: 18, marginBottom: 8 },
-  splitRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  splitTag: { fontSize: 13, fontWeight: '600' },
-  closeBtn: { marginTop: 24, backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
-  closeBtnText: { color: colors.white, fontSize: 16, fontWeight: '700' },
+  splitsTitle: { fontSize: 15, fontWeight: '700', color: colors.navy, marginTop: 18, marginBottom: 8 },
+  splitRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.hairline },
+  closeBtn: { marginTop: 24, backgroundColor: colors.primary, borderRadius: 14, height: 52, alignItems: 'center', justifyContent: 'center' },
+  closeText: { color: colors.white, fontSize: 16, fontWeight: '700' },
 });

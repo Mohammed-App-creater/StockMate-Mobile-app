@@ -1,15 +1,11 @@
-import { Text } from 'react-native';
 import { Redirect, Tabs } from 'expo-router';
+import { BarChart3, Home, Package, Repeat } from 'lucide-react-native';
 import { useAuthStore } from '../../store/auth';
 import { colors } from '../../constants/colors';
-
-// Simple emoji tab icons (no icon font dependency needed yet).
-const tabIcon = (emoji: string) => () => <Text style={{ fontSize: 20 }}>{emoji}</Text>;
 
 export default function AppLayout() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
-  // Not signed in? Send them to login.
   if (!isAuthenticated) {
     return <Redirect href="/(auth)/login" />;
   }
@@ -17,27 +13,34 @@ export default function AppLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        headerStyle: { backgroundColor: colors.surface },
-        headerTitleStyle: { color: colors.text },
+        headerShown: false,
+        tabBarActiveTintColor: colors.blueAccent,
+        tabBarInactiveTintColor: '#64748B',
+        tabBarStyle: {
+          backgroundColor: colors.navy,
+          borderTopWidth: 0,
+          height: 64,
+          paddingTop: 8,
+          paddingBottom: 10,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}
     >
       <Tabs.Screen
         name="index"
-        options={{ title: 'Dashboard', tabBarIcon: tabIcon('🏠') }}
+        options={{ title: 'Home', tabBarIcon: ({ color, size }) => <Home color={color} size={size ?? 23} /> }}
       />
       <Tabs.Screen
         name="products"
-        options={{ title: 'Products', tabBarIcon: tabIcon('📦'), headerShown: false }}
+        options={{ title: 'Products', tabBarIcon: ({ color, size }) => <Package color={color} size={size ?? 23} /> }}
       />
       <Tabs.Screen
         name="transactions"
-        options={{ title: 'Transactions', tabBarIcon: tabIcon('💰'), headerShown: false }}
+        options={{ title: 'Transactions', tabBarIcon: ({ color, size }) => <Repeat color={color} size={size ?? 23} /> }}
       />
       <Tabs.Screen
         name="summary"
-        options={{ title: 'Summary', tabBarIcon: tabIcon('📊') }}
+        options={{ title: 'Summary', tabBarIcon: ({ color, size }) => <BarChart3 color={color} size={size ?? 23} /> }}
       />
     </Tabs>
   );

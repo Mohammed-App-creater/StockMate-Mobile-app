@@ -5,7 +5,7 @@ import { useAuthStore } from './auth';
 // reach your dev machine over the LAN. Falls back to localhost for web/simulator.
 // NOTE: on a physical device "localhost" points at the phone, not your machine —
 // set EXPO_PUBLIC_API_URL=http://<your-LAN-IP>:8000 in .env.
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://stockmate-server-6lvd.onrender.com';
 export const API_BASE_URL = BASE_URL;
 
 export const api = axios.create({
@@ -111,7 +111,7 @@ export interface ProductSummary {
   revenue: number | string;
   cost: number | string;
   profit: number | string;
-  profit_margin_percent: number;
+  profit_margin_percent: number | string;
 }
 
 export interface ReceiptComplianceReport {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -9,21 +10,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { AlertCircle, Bell, Plus, ScanLine, Search } from 'lucide-react-native';
+import { useCameraPermissions } from 'expo-camera';
 import { productsApi, type Product } from '../../../store/api';
-import { formatMoney } from '../../../constants/format';
-import { colors } from '../../../constants/colors';
-
-function StockBadge({ stock }: { stock: number }) {
-  const low = stock < 10;
-  return (
-    <View style={[styles.badge, { backgroundColor: low ? '#FEE2E2' : '#DCFCE7' }]}>
-      <Text style={[styles.badgeText, { color: low ? colors.error : colors.success }]}>
-        {stock} in stock
-      </Text>
-    </View>
-  );
-}
+import { formatETB } from '../../../constants/format';
+import { colors, shadowCard } from '../../../constants/colors';
+import { Badge, Mono } from '../../../components/ui';
+import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 
 export default function ProductsScreen() {
   const router = useRouter();
@@ -32,6 +27,8 @@ export default function ProductsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async (q: string) => {
@@ -40,7 +37,7 @@ export default function ProductsScreen() {
       const res = q.trim() ? await productsApi.search(q.trim()) : await productsApi.list();
       const data = res.data as any;
       setProducts(Array.isArray(data) ? data : data?.items ?? []);
-    } catch (e: any) {
+    } catch {
       setError('Could not load products. Pull to retry.');
       setProducts([]);
     } finally {
@@ -49,7 +46,6 @@ export default function ProductsScreen() {
     }
   }, []);
 
-  // Debounced search (300ms); empty query falls back to the full list.
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
@@ -61,7 +57,6 @@ export default function ProductsScreen() {
     };
   }, [query, load]);
 
-  // Refresh the list whenever the screen regains focus (e.g. after adding).
   useFocusEffect(
     useCallback(() => {
       load(query);
@@ -69,132 +64,137 @@ export default function ProductsScreen() {
     }, [load])
   );
 
+  const openScanner = async () => {
+    if (!permission?.granted) {
+      const res = await requestPermission();
+      if (!res.granted) {
+        Alert.alert('Camera needed', 'Enable camera access to scan barcodes.');
+        return;
+      }
+    }
+    setScannerOpen(true);
+  };
+
+  const onScanned = async (barcode: string) => {
+    setScannerOpen(false);
+    try {
+      const res = await productsApi.getByBarcode(barcode);
+      router.push(`/(app)/products/${res.data.id}`);
+    } catch {
+      Alert.alert('Not found', `No product matches barcode ${barcode}.`);
+    }
+  };
+
   const onRefresh = () => {
     setRefreshing(true);
     load(query);
   };
 
-  const renderItem = ({ item }: { item: Product }) => (
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.7}
-      onPress={() => router.push(`/(app)/products/${item.id}`)}
-    >
-      <View style={styles.cardTop}>
-        <Text style={styles.name} numberOfLines={1}>
-          {item.name}
-        </Text>
-        <Text style={styles.price}>{formatMoney(item.selling_price)}</Text>
-      </View>
-      <View style={styles.cardBottom}>
-        <Text style={styles.meta}>
-          {item.category} · {item.unit}
-        </Text>
-        <StockBadge stock={item.current_stock} />
-      </View>
-    </TouchableOpacity>
-  );
+  const renderItem = ({ item }: { item: Product }) => {
+    const low = item.current_stock < 10;
+    return (
+      <TouchableOpacity style={styles.pcard} activeOpacity={0.7} onPress={() => router.push(`/(app)/products/${item.id}`)}>
+        <Mono name={item.name} seed={item.id} size={46} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.pname} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.pmeta}>{item.category} · {item.unit}</Text>
+        </View>
+        <View style={styles.pright}>
+          {low ? (
+            <Badge tone="red" icon={<AlertCircle size={12} color={colors.danger} />}>{item.current_stock} left</Badge>
+          ) : (
+            <Badge tone="green">{item.current_stock} in stock</Badge>
+          )}
+          <Text style={styles.pprice}>{formatETB(item.selling_price, false)}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <View style={styles.container}>
-      <TextInput
-        style={styles.search}
-        placeholder="Search products…"
-        placeholderTextColor={colors.textMuted}
-        value={query}
-        onChangeText={setQuery}
-        autoCapitalize="none"
-        autoCorrect={false}
-        clearButtonMode="while-editing"
-      />
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.head}>
+        <Text style={styles.title}>Products</Text>
+        <View style={styles.bell}><Bell size={21} color={colors.navy} /></View>
+      </View>
+
+      <View style={styles.searchWrap}>
+        <View style={styles.search}>
+          <Search size={20} color={colors.textMuted2} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search products…"
+            placeholderTextColor={colors.textMuted2}
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <TouchableOpacity style={styles.scanBtn} onPress={openScanner} activeOpacity={0.85}>
+            <ScanLine size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
+        <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
       ) : (
         <FlatList
           data={products}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          contentContainerStyle={products.length === 0 && styles.emptyContainer}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
-          }
+          contentContainerStyle={[styles.listContent, products.length === 0 && styles.grow]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           ListEmptyComponent={
             <View style={styles.center}>
-              <Text style={styles.emptyText}>
-                {error ?? (query ? 'No products match your search.' : 'No products yet.')}
-              </Text>
+              <Text style={styles.emptyText}>{error ?? (query ? 'No products match your search.' : 'No products yet.')}</Text>
             </View>
           }
         />
       )}
 
-      <TouchableOpacity
-        style={styles.fab}
-        activeOpacity={0.85}
-        onPress={() => router.push('/(app)/products/add')}
-      >
-        <Text style={styles.fabText}>+</Text>
+      <TouchableOpacity style={styles.fab} activeOpacity={0.85} onPress={() => router.push('/(app)/products/add')}>
+        <Plus size={26} color="#fff" />
       </TouchableOpacity>
-    </View>
+
+      <BarcodeScannerModal visible={scannerOpen} onClose={() => setScannerOpen(false)} onScanned={onScanned} />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  search: {
-    margin: 16,
-    marginBottom: 8,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: colors.text,
-  },
+  safe: { flex: 1, backgroundColor: colors.background },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 6, paddingBottom: 8 },
+  title: { fontSize: 22, fontWeight: '700', letterSpacing: -0.5, color: colors.navy },
+  bell: { width: 42, height: 42, borderRadius: 13, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', ...shadowCard },
+  searchWrap: { paddingHorizontal: 20, paddingBottom: 14 },
+  search: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 48, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 13, paddingLeft: 14, paddingRight: 8, ...shadowCard },
+  searchInput: { flex: 1, fontSize: 14.5, color: colors.text },
+  scanBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   center: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  emptyContainer: { flexGrow: 1 },
+  grow: { flexGrow: 1 },
   emptyText: { color: colors.textMuted, fontSize: 15, textAlign: 'center' },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    marginHorizontal: 16,
-    marginVertical: 6,
-  },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  name: { fontSize: 16, fontWeight: '700', color: colors.text, flex: 1, marginRight: 12 },
-  price: { fontSize: 16, fontWeight: '700', color: colors.primary },
-  cardBottom: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  meta: { fontSize: 13, color: colors.textMuted, textTransform: 'capitalize' },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
-  badgeText: { fontSize: 12, fontWeight: '600' },
+  listContent: { paddingHorizontal: 20, paddingBottom: 100 },
+  pcard: { flexDirection: 'row', alignItems: 'center', gap: 13, backgroundColor: colors.card, borderRadius: 15, padding: 13, paddingHorizontal: 14, marginBottom: 11, ...shadowCard },
+  pname: { fontSize: 14.5, fontWeight: '700', color: colors.navy, letterSpacing: -0.2 },
+  pmeta: { fontSize: 12, color: colors.textMuted, marginTop: 2, textTransform: 'capitalize' },
+  pright: { alignItems: 'flex-end', gap: 5 },
+  pprice: { fontSize: 15, fontWeight: '700', color: colors.navy, letterSpacing: -0.3 },
   fab: {
     position: 'absolute',
     right: 20,
     bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 58,
+    height: 58,
+    borderRadius: 19,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: colors.primary,
+    shadowOpacity: 0.45,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
   },
-  fabText: { color: colors.white, fontSize: 30, lineHeight: 32, fontWeight: '300' },
 });
