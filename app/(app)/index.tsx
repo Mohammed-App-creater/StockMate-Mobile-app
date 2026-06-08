@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Coins, LogOut, Receipt, Repeat, ShoppingCart, TrendingUp, Wallet } from 'lucide-react-native';
+import { Coins, Receipt, Repeat, ShoppingCart, TrendingUp, UserRound, Wallet } from 'lucide-react-native';
 import {
   analyticsApi,
   transactionsApi,
@@ -52,7 +52,6 @@ function txValue(t: Transaction): number {
 export default function DashboardScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
 
   const [summary, setSummary] = useState<PeriodSummary | null>(null);
   const [recent, setRecent] = useState<Transaction[]>([]);
@@ -96,8 +95,8 @@ export default function DashboardScreen() {
             <Text style={styles.name}>{name}</Text>
             <Text style={styles.date}>{dateStr}</Text>
           </View>
-          <TouchableOpacity style={styles.bell} onPress={logout} accessibilityLabel="Log out">
-            <LogOut size={20} color={colors.navy} />
+          <TouchableOpacity style={styles.bell} onPress={() => router.push('/(app)/profile')} accessibilityLabel="Profile">
+            <UserRound size={20} color={colors.navy} />
           </TouchableOpacity>
         </View>
 

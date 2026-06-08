@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Eye, EyeOff, Lock, Package, User } from 'lucide-react-native';
-import { api } from '../../store/api';
+import { api, authApi } from '../../store/api';
 import { useAuthStore } from '../../store/auth';
 import { colors, shadowCard } from '../../constants/colors';
 
@@ -33,10 +33,17 @@ export default function LoginScreen() {
     setError(null);
     setLoading(true);
     try {
-      const res = await api.post('/auth/login', { username, password });
-      const token: string | undefined = res.data?.access_token ?? res.data?.token;
-      const user = res.data?.user ?? null;
+      const res = await authApi.login({ username: username.trim(), password });
+      const token = res.data?.access_token;
       if (!token) throw new Error('No token in response');
+      // Fetch the profile with the fresh token (the store isn't set yet).
+      let user = null;
+      try {
+        const me = await api.get('/users/me', { headers: { Authorization: `Bearer ${token}` } });
+        user = me.data;
+      } catch {
+        // Non-fatal — the greeting falls back to "there".
+      }
       await login(token, user);
       router.replace('/(app)');
     } catch (e: any) {

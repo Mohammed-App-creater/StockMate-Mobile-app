@@ -138,8 +138,68 @@ export interface PeriodSummary {
 }
 
 // ---------------------------------------------------------------------------
+// Auth & user types
+// ---------------------------------------------------------------------------
+export interface UserResponse {
+  id: string;
+  username: string;
+  full_name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: 'bearer';
+}
+
+export interface RegisterRequest {
+  username: string;
+  full_name: string;
+  password: string;
+}
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+export interface UpdateUserRequest {
+  full_name?: string;
+  username?: string;
+}
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
+// Most errors: { detail: string }; 422: { detail: ValidationError[] }
+export interface ApiError {
+  detail: string | Array<{ loc: (string | number)[]; msg: string; type: string }>;
+}
+
+// Pull a human-readable message out of a FastAPI error response.
+export function errorMessage(e: any, fallback = 'Something went wrong.'): string {
+  const detail = e?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg;
+  if (e?.response?.status === 401) return 'Your session expired. Please sign in again.';
+  return fallback;
+}
+
+// ---------------------------------------------------------------------------
 // Typed API helpers
 // ---------------------------------------------------------------------------
+export const authApi = {
+  register: (data: RegisterRequest) => api.post<UserResponse>('/auth/register', data),
+  login: (data: LoginRequest) => api.post<TokenResponse>('/auth/login', data),
+};
+
+export const usersApi = {
+  me: () => api.get<UserResponse>('/users/me'),
+  update: (data: UpdateUserRequest) => api.put<UserResponse>('/users/me', data),
+  changePassword: (data: ChangePasswordRequest) =>
+    api.post<{ message: string }>('/users/me/change-password', data),
+};
+
 export const productsApi = {
   list: () => api.get<Product[]>('/products/'),
   search: (q: string) => api.get<Product[]>(`/products/search?q=${encodeURIComponent(q)}`),

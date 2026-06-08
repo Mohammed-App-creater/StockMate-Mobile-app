@@ -42,6 +42,8 @@ export default function AppLayout() {
         name="summary"
         options={{ title: 'Summary', tabBarIcon: ({ color, size }) => <BarChart3 color={color} size={size ?? 23} /> }}
       />
+      {/* Reachable via router.push('/(app)/profile'); hidden from the tab bar. */}
+      <Tabs.Screen name="profile" options={{ href: null }} />
     </Tabs>
   );
 }

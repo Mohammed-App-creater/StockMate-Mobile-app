@@ -4,7 +4,14 @@ import { create } from 'zustand';
 const TOKEN_KEY = 'stockmate.token';
 const USER_KEY = 'stockmate.user';
 
-export type User = Record<string, any>;
+// Mirrors the API UserResponse.
+export interface User {
+  id: string;
+  username: string;
+  full_name: string;
+  is_active?: boolean;
+  created_at?: string;
+}
 
 interface AuthState {
   token: string | null;
@@ -13,6 +20,7 @@ interface AuthState {
   // True while we are reading persisted auth from AsyncStorage on app start.
   isHydrating: boolean;
   login: (token: string, user?: User | null) => Promise<void>;
+  setUser: (user: User) => Promise<void>;
   logout: () => Promise<void>;
   hydrate: () => Promise<void>;
 }
@@ -31,6 +39,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       await AsyncStorage.removeItem(USER_KEY);
     }
     set({ token, user, isAuthenticated: true });
+  },
+
+  // Persist + update the cached user (used after editing the profile).
+  setUser: async (user) => {
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+    set({ user });
   },
 
   logout: async () => {
